@@ -3,12 +3,14 @@ import pandas as pd
 import time
 from datetime import datetime
 import threading
-import tkinter as tk
-from tkinter import messagebox
 import os
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QLabel, QPushButton, QVBoxLayout, QWidget, QMessageBox, QLineEdit
+)
+from PyQt5.QtCore import Qt
 
 # URL del servidor de sensores
-URL = "http://192.168.0.210:8080/sensors.json"
+URL = "http://158.97.67.15:8080/sensors.json"
 
 # DataFrame global para almacenar los datos
 df = pd.DataFrame(columns=["timestamp", "sensor", "x", "y", "z", "w", "accuracy"])
@@ -26,6 +28,7 @@ output_folder = ""
 # Set para almacenar los timestamps ya procesados
 processed_timestamps = set()
 
+
 def fetch_sensor_data():
     """Obtiene los datos de sensores desde la URL."""
     try:
@@ -35,6 +38,7 @@ def fetch_sensor_data():
     except requests.RequestException as e:
         print(f"Error al obtener datos: {e}")
         return None
+
 
 def process_data(data):
     """Parsea los datos del JSON y los almacena en el DataFrame global."""
@@ -81,6 +85,7 @@ def process_data(data):
     with df_lock:  # Bloquear el acceso al DataFrame mientras se actualiza
         df = pd.concat([df, new_df], ignore_index=True)
 
+
 def data_collection_thread():
     """Función para recolectar datos en un hilo separado."""
     global is_recording, start_time
@@ -90,19 +95,20 @@ def data_collection_thread():
             process_data(sensor_data)
         time.sleep(1)  # Esperar 1 segundo antes de la próxima consulta
 
-def start_recording(entry = ""):
+
+def start_recording(window, entry=""):
     """Inicia la recolección de datos."""
     global is_recording, start_time, df, processed_timestamps, output_folder
     if not is_recording:
-        if entry!="":
+        if entry != "":
             output_folder = entry
         else:
-            output_folder = folder_entry.get()  # Obtener el nombre de la carpeta desde la interfaz
+            output_folder = folder_entry.text()  # Obtener el nombre de la carpeta desde la interfaz
         if not output_folder:
-            messagebox.showwarning("Advertencia", "Por favor, ingrese un nombre para la carpeta.")
+            QMessageBox.warning(window, "Advertencia", "Por favor, ingrese un nombre para la carpeta.")
             return
 
-        messagebox.showinfo("Inicio", "La recolección de datos empezara al presionar el boton.")
+        QMessageBox.information(window, "Inicio", "La recolección de datos empezará al presionar el botón.")
 
         is_recording = True
         start_time = datetime.now()
@@ -110,9 +116,10 @@ def start_recording(entry = ""):
         processed_timestamps = set()  # Reiniciar el conjunto de timestamps procesados
 
     else:
-        messagebox.showwarning("Advertencia", "La recolección de datos ya está en curso.")
+        QMessageBox.warning(window, "Advertencia", "La recolección de datos ya está en curso.")
 
-def stop_recording():
+
+def stop_recording(window):
     """Detiene la recolección de datos y guarda los datos en un archivo."""
     global is_recording, start_time, df, output_folder
     if is_recording:
@@ -126,38 +133,49 @@ def stop_recording():
         # Guardar los datos en un archivo CSV dentro de la carpeta
         filename = f"{output_folder}/sensor_data_{start_time.strftime('%Y%m%d_%H%M%S')}_to_{end_time.strftime('%Y%m%d_%H%M%S')}.csv"
         df.to_csv(filename, index=False)
-        # messagebox.showinfo("Fin", f"La recolección de datos ha finalizado. Los datos se han guardado en {filename}.")
+        QMessageBox.information(window, "Fin", f"La recolección de datos ha finalizado. Los datos se han guardado en {filename}.")
     else:
-        messagebox.showwarning("Advertencia", "La recolección de datos no está en curso.")
+        QMessageBox.warning(window, "Advertencia", "La recolección de datos no está en curso.")
 
-def main():
-    # Crear la interfaz gráfica
-    root = tk.Tk()
-    root.title("Recolección de Datos de Sensores")
 
-    # Campo de entrada para el nombre de la carpeta
-    folder_label = tk.Label(root, text="Nombre de la carpeta:")
-    folder_label.pack(pady=5)
+class DataCollectionApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Recolección de Datos de Sensores")
+        self.setGeometry(100, 100, 400, 200)
 
-    global folder_entry
-    folder_entry = tk.Entry(root)
-    folder_entry.pack(pady=5)
+        # Layout principal
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
 
-    # Botón para iniciar la recolección
-    start_button = tk.Button(root, text="Iniciar Recolección", command=start_recording)
-    start_button.pack(pady=10)
+        # Campo de entrada para el nombre de la carpeta
+        self.folder_label = QLabel("Nombre de la carpeta:", self)
+        self.layout.addWidget(self.folder_label)
 
-    # Botón para detener la recolección
-    stop_button = tk.Button(root, text="Detener Recolección", command=stop_recording)
-    stop_button.pack(pady=10)
+        global folder_entry
+        folder_entry = QLineEdit(self)
+        self.layout.addWidget(folder_entry)
 
+        # Botón para iniciar la recolección
+        self.start_button = QPushButton("Iniciar Recolección", self)
+        self.start_button.clicked.connect(lambda: start_recording(self))
+        self.layout.addWidget(self.start_button)
+
+        # Botón para detener la recolección
+        self.stop_button = QPushButton("Detener Recolección", self)
+        self.stop_button.clicked.connect(lambda: stop_recording(self))
+        self.layout.addWidget(self.stop_button)
+
+
+if __name__ == "__main__":
     # Iniciar el hilo de recolección de datos
     data_thread = threading.Thread(target=data_collection_thread)
     data_thread.daemon = True  # El hilo se detendrá cuando el programa principal termine
     data_thread.start()
 
-    # Iniciar el bucle de la interfaz gráfica
-    root.mainloop()
-
-if __name__ == "__main__":
-    main()
+    # Iniciar la aplicación PyQt5
+    app = QApplication([])
+    window = DataCollectionApp()
+    window.show()
+    app.exec_()

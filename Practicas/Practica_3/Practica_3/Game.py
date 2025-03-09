@@ -1,23 +1,27 @@
+import sys
 import threading
-import tkinter as tk
-from tkinter import messagebox
 import time
 import os
 import numpy as np
 import pandas as pd
 import joblib
-from PIL import Image, ImageTk, ImageSequence
+from PIL import Image, ImageSequence
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QLabel, QPushButton, QVBoxLayout, QWidget, QMessageBox
+)
+from PyQt5.QtGui import QPixmap, QMovie
+from PyQt5.QtCore import Qt, QTimer
 
 # Importamos las funciones de recolección de datos desde Collect_Data.py
 import Collect_Data
 from Training_Model import MovementEvaluationSystem
 
 
-class MovimientoJuego:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Juego de Movimientos")
-        self.root.geometry("700x700")
+class MovimientoJuego(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Juego de Movimientos")
+        self.setGeometry(100, 100, 700, 700)
 
         # Cargar el sistema de evaluación exportado
         self.movement_system = joblib.load("movement_system.pkl")
@@ -33,40 +37,55 @@ class MovimientoJuego:
         self.total_attempts = 0
         self.start_time = time.time()
 
-        # Variable para almacenar el identificador del after() del gif animado
-        self.gif_after_id = None
+        # Configuración de la interfaz
+        self.init_ui()
 
-        # Frame para imagen y nombre del movimiento
-        self.frame_movimiento = tk.Frame(root)
-        self.frame_movimiento.pack(pady=20)
+    def init_ui(self):
+        # Layout principal
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
 
         # Etiqueta para la imagen del movimiento
-        self.label_imagen = tk.Label(self.frame_movimiento)
-        self.label_imagen.pack(side=tk.LEFT, padx=10)
+        self.label_imagen = QLabel(self)
+        self.label_imagen.setAlignment(Qt.AlignCenter)
+        self.layout.addWidget(self.label_imagen)
 
         # Etiqueta para el nombre del movimiento
-        self.label_movimiento = tk.Label(self.frame_movimiento, text="", font=("Arial", 24))
-        self.label_movimiento.pack(side=tk.LEFT, padx=10)
+        self.label_movimiento = QLabel("", self)
+        self.label_movimiento.setAlignment(Qt.AlignCenter)
+        self.label_movimiento.setStyleSheet("font-size: 24px;")
+        self.layout.addWidget(self.label_movimiento)
 
         # Etiqueta para la cuenta regresiva
-        self.label_cuenta_regresiva = tk.Label(root, text="", font=("Arial", 18))
-        self.label_cuenta_regresiva.pack(pady=10)
+        self.label_cuenta_regresiva = QLabel("", self)
+        self.label_cuenta_regresiva.setAlignment(Qt.AlignCenter)
+        self.label_cuenta_regresiva.setStyleSheet("font-size: 18px;")
+        self.layout.addWidget(self.label_cuenta_regresiva)
 
         # Etiqueta para el mensaje de resultado
-        self.label_resultado = tk.Label(root, text="", font=("Arial", 18))
-        self.label_resultado.pack(pady=10)
+        self.label_resultado = QLabel("", self)
+        self.label_resultado.setAlignment(Qt.AlignCenter)
+        self.label_resultado.setStyleSheet("font-size: 18px;")
+        self.layout.addWidget(self.label_resultado)
 
         # Etiqueta para el GIF de resultado
-        self.label_result_gif = tk.Label(root)
-        self.label_result_gif.pack(pady=5)
+        self.label_result_gif = QLabel(self)
+        self.label_result_gif.setAlignment(Qt.AlignCenter)
+        self.layout.addWidget(self.label_result_gif)
 
         # Botones de control
-        self.boton_intentar = tk.Button(root, text="Intentar de nuevo", command=self.intentar_de_nuevo, state=tk.DISABLED)
-        self.boton_intentar.pack(pady=5)
+        self.boton_intentar = QPushButton("Intentar de nuevo", self)
+        self.boton_intentar.clicked.connect(self.intentar_de_nuevo)
+        self.boton_intentar.setEnabled(False)
+        self.layout.addWidget(self.boton_intentar)
 
-        self.boton_siguiente = tk.Button(root, text="Siguiente movimiento", command=self.siguiente_movimiento, state=tk.DISABLED)
-        self.boton_siguiente.pack(pady=5)
+        self.boton_siguiente = QPushButton("Siguiente movimiento", self)
+        self.boton_siguiente.clicked.connect(self.siguiente_movimiento)
+        self.boton_siguiente.setEnabled(False)
+        self.layout.addWidget(self.boton_siguiente)
 
+        # Iniciar el juego
         self.iniciar_juego()
 
     def iniciar_juego(self):
@@ -76,27 +95,25 @@ class MovimientoJuego:
 
     def mostrar_movimiento_actual(self):
         movimiento_actual = self.movimientos[self.indice_movimiento_actual]
-        self.label_movimiento.config(text=f"Movimiento: {movimiento_actual}")
+        self.label_movimiento.setText(f"Movimiento: {movimiento_actual}")
 
         # Cargar imagen correspondiente (PNG) desde la carpeta "Assets"
         image_path = os.path.join("Assets", f"{movimiento_actual}.png")
         if os.path.exists(image_path):
-            imagen = Image.open(image_path)
-            imagen = imagen.resize((150, 150), Image.ANTIALIAS)
-            self.image_mov = ImageTk.PhotoImage(imagen)
-            self.label_imagen.config(image=self.image_mov)
+            pixmap = QPixmap(image_path)
+            self.label_imagen.setPixmap(pixmap.scaled(150, 150, Qt.KeepAspectRatio))
         else:
-            self.label_imagen.config(image="")
+            self.label_imagen.clear()
             print(f"No se encontró la imagen para {movimiento_actual} en {image_path}.")
 
     def iniciar_recoleccion_datos(self):
         Collect_Data.output_folder = "temp_data"
         if not os.path.exists(Collect_Data.output_folder):
             os.makedirs(Collect_Data.output_folder)
-        Collect_Data.start_recording("temp_data")
+        Collect_Data.start_recording(self, "temp_data")  # Pasar self como argumento
 
     def detener_recoleccion_datos(self):
-        Collect_Data.stop_recording()
+        Collect_Data.stop_recording(self)  # Pasar self como argumento
         files = [f for f in os.listdir(Collect_Data.output_folder) if f.endswith(".csv")]
         if not files:
             return None
@@ -108,16 +125,16 @@ class MovimientoJuego:
 
     def cuenta_regresiva(self, segundos):
         if segundos > 0:
-            self.label_cuenta_regresiva.config(text=f"Tiempo restante: {segundos} segundos")
-            self.root.after(1000, self.cuenta_regresiva, segundos - 1)
+            self.label_cuenta_regresiva.setText(f"Tiempo restante: {segundos} segundos")
+            QTimer.singleShot(1000, lambda: self.cuenta_regresiva(segundos - 1))
         else:
-            self.label_cuenta_regresiva.config(text="¡Movimiento capturado!")
+            self.label_cuenta_regresiva.setText("¡Movimiento capturado!")
             self.calificar_movimiento()
 
     def calificar_movimiento(self):
         filename = self.detener_recoleccion_datos()
         if filename is None:
-            messagebox.showerror("Error", "No se pudieron obtener datos de sensor.")
+            QMessageBox.critical(self, "Error", "No se pudieron obtener datos de sensor.")
             calificacion = 0
         else:
             df = pd.read_csv(filename)
@@ -134,25 +151,6 @@ class MovimientoJuego:
 
         self.mostrar_resultado(calificacion)
 
-    def load_gif_frames(self, gif_path):
-        frames = []
-        try:
-            im = Image.open(gif_path)
-            for frame in ImageSequence.Iterator(im):
-                frame = frame.resize((150, 150), Image.ANTIALIAS)
-                frames.append(ImageTk.PhotoImage(frame.copy()))
-        except Exception as e:
-            print("Error al cargar GIF:", e)
-        return frames
-
-    def animate_gif(self, frames, delay=100, counter=0):
-        if frames:
-            frame = frames[counter]
-            self.label_result_gif.config(image=frame)
-            counter = (counter + 1) % len(frames)
-            # Guardamos el id para poder cancelarlo luego
-            self.gif_after_id = self.root.after(delay, self.animate_gif, frames, delay, counter)
-
     def mostrar_resultado(self, calificacion):
         if calificacion < 0.15:
             mensaje = "Intente de nuevo"
@@ -167,7 +165,7 @@ class MovimientoJuego:
             mensaje = "Excelente"
             gif_file = "Excelente.gif"
 
-        self.label_resultado.config(text=f"{mensaje} {calificacion:.4f}")
+        self.label_resultado.setText(f"{mensaje} {calificacion:.4f}")
 
         mov_actual = self.movimientos[self.indice_movimiento_actual]
         self.attempts_data[mov_actual].append(calificacion)
@@ -177,35 +175,30 @@ class MovimientoJuego:
 
         gif_path = os.path.join("Assets", gif_file)
         if os.path.exists(gif_path):
-            frames = self.load_gif_frames(gif_path)
-            self.animate_gif(frames, delay=100)
+            movie = QMovie(gif_path)
+            self.label_result_gif.setMovie(movie)
+            movie.start()
         else:
-            self.label_result_gif.config(image="")
+            self.label_result_gif.clear()
             print(f"No se encontró el GIF para {mensaje} en {gif_path}.")
 
-        self.boton_intentar.config(state=tk.NORMAL)
-        self.boton_siguiente.config(state=tk.NORMAL)
-
-    def cancelar_gif(self):
-        if self.gif_after_id is not None:
-            self.root.after_cancel(self.gif_after_id)
-            self.gif_after_id = None
-        self.label_result_gif.config(image="")
+        self.boton_intentar.setEnabled(True)
+        self.boton_siguiente.setEnabled(True)
 
     def intentar_de_nuevo(self):
-        self.label_resultado.config(text="")
-        self.cancelar_gif()
-        self.boton_intentar.config(state=tk.DISABLED)
-        self.boton_siguiente.config(state=tk.DISABLED)
+        self.label_resultado.clear()
+        self.label_result_gif.clear()
+        self.boton_intentar.setEnabled(False)
+        self.boton_siguiente.setEnabled(False)
         self.iniciar_recoleccion_datos()
         self.iniciar_cuenta_regresiva()
 
     def siguiente_movimiento(self):
         self.indice_movimiento_actual = (self.indice_movimiento_actual + 1) % len(self.movimientos)
-        self.label_resultado.config(text="")
-        self.cancelar_gif()
-        self.boton_intentar.config(state=tk.DISABLED)
-        self.boton_siguiente.config(state=tk.DISABLED)
+        self.label_resultado.clear()
+        self.label_result_gif.clear()
+        self.boton_intentar.setEnabled(False)
+        self.boton_siguiente.setEnabled(False)
         self.mostrar_movimiento_actual()
         self.iniciar_recoleccion_datos()
         self.iniciar_cuenta_regresiva()
@@ -230,16 +223,15 @@ class MovimientoJuego:
             resumen += f"  {key}: {count}\n"
         resumen += f"\nTiempo total: {tiempo_total:.2f} segundos"
 
-        resumen_win = tk.Toplevel(self.root)
-        resumen_win.title("Resumen General")
-        tk.Label(resumen_win, text=resumen, font=("Arial", 14), justify=tk.LEFT).pack(padx=20, pady=20)
-        tk.Button(resumen_win, text="Cerrar", command=resumen_win.destroy).pack(pady=10)
+        QMessageBox.information(self, "Resumen General", resumen)
 
 
 if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    juego = MovimientoJuego()
     data_thread = threading.Thread(target=Collect_Data.data_collection_thread)
     data_thread.daemon = True
     data_thread.start()
-    root = tk.Tk()
-    juego = MovimientoJuego(root)
-    root.mainloop()
+
+    juego.show()
+    sys.exit(app.exec_())
